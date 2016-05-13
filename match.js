@@ -1,31 +1,27 @@
 /**
-The MIT License (MIT)
-
-Copyright (c) 2016 Dias Alain
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+ The MIT License (MIT)
+ Copyright (c) 2016 Dias Alain
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+ The above copyright notice and this permission notice shall be included in all
+ copies or substantial portions of the Software.
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE.
  */
 /* jshint undef: true, unused: true*/
 /* globals define */
 /* globals module */
 (function (root, match) {
-  if(typeof define === 'function' && define.amd) {
+  if (typeof define === 'function' && define.amd) {
     define(['match'], match);
   } else if (typeof module === 'object' && module.exports) {
     module.exports = match();
@@ -34,9 +30,20 @@ SOFTWARE.
   }
 })(this, function () {
   'use strict';
-  
+
+  /**
+   * Pollyfill map function for IE 8 support
+   */
+  (function (fn) {
+    if (!fn.map) fn.map = function (f) {
+      var r = [];
+      for (var i = 0; i < this.length; i++)if (this[i] !== undefined)r[i] = f(this[i], i);
+      return r;
+    }
+  })(Array.prototype);
+
   var NUMBER = /^-?[0-9]+(\.[0-9]+)?/;
-  var STRING = /^('[a-zA-Z][a-zA-Z0-9]*')|("[a-zA-Z][a-zA-Z0-9]*")/;
+  var STRING = /^(('[a-zA-Z0-9]*')|("[a-zA-Z0-9]*"))/;
   var IDENTIFIER = /^[a-zA-Z][a-zA-Z0-9]*/;
   var LITTERAL = [
     {
@@ -84,6 +91,8 @@ SOFTWARE.
   var applyCommaSeparatedVariableRule;
   var applyValueRule;
 
+  /*** Utility functions ***/
+
   var findFirst = function (array, predicateFunction) {
     var i = 0;
     var l = array.length;
@@ -117,6 +126,8 @@ SOFTWARE.
     }
     return -1;
   };
+
+  /*** Parsing functions ***/
 
   var tokenizeNumber = function (chunk) {
     var part = NUMBER.exec(chunk);
@@ -183,6 +194,21 @@ SOFTWARE.
     return tokens;
   };
 
+  /*** Rule functions ***/
+
+  /**
+   * Checks if the expression follows :
+   *
+   * Array : | LBRACKET * RBRACKET
+   | LBRACKET * CommaSeparactedExprs * RBRACKET
+   | LBRACKET * expr * RBRACKET
+   | expr * COLON * COLON * expr
+
+   * to ensure the pattern corresponds to an array in the pattern
+   *
+   * @param tokens the parsed tokens
+   * @returns {*}
+   */
   applyArrayRule = function (tokens) {
     // tokens must be longer than 2
     if (tokens && tokens.length > 1) {
@@ -205,7 +231,7 @@ SOFTWARE.
       });
       if (firstColonIndex != -1 && tokens[firstColonIndex + 1].name === 'COLON') {
         var headExpression = applyExprRule.apply(null, [ tokens.slice(0,
-            firstColonIndex) ]);
+          firstColonIndex) ]);
         if (headExpression) {
           var queueExpression = applyExprRule.apply(null, [ tokens
             .slice(headExpression.length + 2) ]);
@@ -243,6 +269,19 @@ SOFTWARE.
     }
   };
 
+  /**
+   * Checks if the expression follows :
+   *
+   * expr :  | Array
+   | Object
+   | Variable
+   | Value
+
+   * to ensure the pattern corresponds to an expression declaration in the pattern
+   *
+   * @param tokens the parsed tokens
+   * @returns {*}
+   */
   applyExprRule = function (tokens) {
     if (tokens && tokens.length > 0) {
       var expression = applyArrayRule.apply(null, [ tokens ]) || applyObjectRule.apply(null, [ tokens ]) || applyValueRule.apply(null, [ tokens ]) || applyVariableRule.apply(null, [ tokens ]);
@@ -256,6 +295,18 @@ SOFTWARE.
     }
   };
 
+  /**
+   * Checks if the expression follows :
+   *
+   * Object : | LBRACES * RBRACES
+   | LBRACES * Variable * RBRACES
+   | LBRACES * CommaSeparatedVariable * RBRACES
+
+   * to ensure the pattern corresponds to an object declaration in the pattern
+   *
+   * @param tokens the parsed tokens
+   * @returns {*}
+   */
   applyObjectRule = function (tokens) {
     if (tokens && tokens.length > 1 && tokens[0].name === 'LBRACES') {
       var lastIndex = findLastIndex(tokens, function (current) {
@@ -272,6 +323,17 @@ SOFTWARE.
     }
   };
 
+  /**
+   * Checks if the expression follows :
+   *
+   * CommaSeparatedExpr : | expr * COMMA * expr
+   | expr * COMMA * CommaSeparatedExpr
+
+   * to ensure the pattern corresponds to a declaration of expressions separated by a comma in the pattern
+   *
+   * @param tokens the parsed tokens
+   * @returns {*}
+   */
   applyCommaSeparatedExprRule = function (tokens) {
     if (tokens && tokens.length > 2) {
       var firstCommaIndex = findFirstIndex(tokens, function (current, index) {
@@ -310,6 +372,18 @@ SOFTWARE.
     }
   };
 
+  /**
+   * Checks if the expression follows :
+   *
+   * Value : | String
+   | Number
+   | Wildcard
+
+   * to ensure the pattern corresponds to a value declaration in the pattern
+   *
+   * @param tokens the parsed tokens
+   * @returns {*}
+   */
   applyValueRule = function (tokens) {
     if (tokens && tokens.length === 1 && (tokens[0].name === 'STRING' || tokens[0].name === 'NUMBER' || tokens[0].name === 'WILDCARD')) {
       return {
@@ -320,6 +394,15 @@ SOFTWARE.
     }
   };
 
+  /**
+   * Checks if the expression follows :
+   *
+   * Variable : Identifier
+   * to ensure the pattern corresponds to a variable declaration in the pattern
+   *
+   * @param tokens the parsed tokens
+   * @returns {*}
+   */
   applyVariableRule = function (tokens) {
     if (tokens && tokens.length === 1 && tokens[0].name === 'IDENTIFIER') {
       return {
@@ -330,6 +413,17 @@ SOFTWARE.
     }
   };
 
+  /**
+   * Checks if the expression follows :
+   *
+   * CommaSeparatedVariables : | Variable * COMMA * Variable
+   | Variables * COMMA * CommaSeparatedVariable
+
+   * to ensure the pattern corresponds to a declaration of variables separated by a comma in the pattern
+   *
+   * @param tokens the parsed tokens
+   * @returns {*}
+   */
   applyCommaSeparatedVariableRule = function (tokens) {
     if (tokens && tokens.length > 2) {
       var firstCommaIndex = findFirstIndex(tokens, function (current) {
@@ -354,6 +448,12 @@ SOFTWARE.
     }
   };
 
+  /**
+   * Will transform the tokens to a structure that can be computed to match if a data corresponds to the pattern
+   *
+   * @param tokens
+   * @returns {*} Object if the tokens have been computed successfully and undefine if not
+   */
   var applyRules = function (tokens) {
 
     var parsedRule = applyExprRule.apply(null, [ tokens ]);
@@ -366,9 +466,8 @@ SOFTWARE.
     return parsedRule;
   };
 
-  /**
-   * Pattern matching functions
-   */
+  /*** Pattern matching functions ***/
+
   var when = function (pattern) {
     var parsedRule = applyRules(tokenize(pattern));
     if (!parsedRule) {
@@ -383,16 +482,16 @@ SOFTWARE.
           switch (rule.name) {
             case 'EXPR':
               env.valueToCompute = data.value;
-              if(data.parent !== null) {
+              if (data.parent !== null) {
                 env.valueToCompute = env.valueToCompute[0];
               }
               env.expression = aux(rule.expressions[0], {value: env.valueToCompute, env: [], parent: data.parent});
               return {computed: env.expression.computed, env: data.env.concat(env.expression.env), length: env.expression.length};
             case 'COMMASEPARATEDEXPR':
-              env.leftExpression = aux(rule.expressions[0], {value: data.value.slice(0,1), env: [], parent: data.parent});
+              env.leftExpression = aux(rule.expressions[0], {value: data.value.slice(0, 1), env: [], parent: data.parent});
               env.computed = env.leftExpression.computed;
               env.length = env.leftExpression.length;
-              if(env.computed) {
+              if (env.computed) {
                 env.rightExpression = aux(rule.expressions[1], {value: data.value.slice(1), env: [], parent: data.parent});
                 env.computed = env.rightExpression.computed;
                 env.env = env.leftExpression.env.concat(env.rightExpression.env);
@@ -400,19 +499,19 @@ SOFTWARE.
               }
               return {computed: env.computed, env: env.env, length: env.length};
             case 'VARIABLE':
-              if(data.parent === 'OBJECT') {
+              if (data.parent === 'OBJECT') {
                 env.variable = data.value[rule.expressions];
               } else {
                 env.variable = data.value;
               }
               env.env = data.env;
               env.env.push(env.variable);
-              return {computed: env.variable !== 'undefined', env: env.env, length: 1};
+              return {computed: typeof env.variable !== 'undefined', env: env.env, length: 1};
             case 'COMMASEPARATEDVARIABLE':
               env.leftExpression = aux(rule.expressions[0], {value: data.value, env: [], index: 0, parent: data.parent});
               env.computed = env.leftExpression.computed;
               env.length = env.leftExpression.length;
-              if(env.computed) {
+              if (env.computed) {
                 env.rightExpression = aux(rule.expressions[1], {value: data.value, env: [], index: 0, parent: data.parent});
                 env.computed = env.rightExpression.computed;
                 env.env = env.leftExpression.env.concat(env.rightExpression.env);
@@ -421,10 +520,10 @@ SOFTWARE.
               return {computed: env.computed, env: env.env, length: env.length};
             case 'OBJECT':
               env.computed = data.value && typeof data.value === 'object';
-              if(env.computed) {
+              if (env.computed) {
                 env.nbPropsData = 0;
                 for (var k in data.value) if (data.value.hasOwnProperty(k)) ++env.nbPropsData;
-                if(rule.expressions[0]) {
+                if (rule.expressions[0]) {
                   env.expression = aux(rule.expressions[0], {value: data.value, env: [], index: 0, parent: rule.name});
                   env.computed = env.expression.computed && env.expression.length === env.nbPropsData;
                   env.env = env.expression.env;
@@ -458,11 +557,11 @@ SOFTWARE.
             case 'VALUE':
               env.value = data.value;
               env.computed = rule.expressions === '_';
-              if(!env.computed) {
+              if (!env.computed) {
                 env.computed = rule.expressions === env.value;
-                if(!env.computed) {
+                if (!env.computed) {
                   env.integer = Number(rule.expressions);
-                  if(!isNaN(env.integer)) {
+                  if (!isNaN(env.integer)) {
                     env.computed = env.integer === env.value;
                   }
                 }
@@ -489,43 +588,43 @@ SOFTWARE.
     };
   };
 
-  var match = function(listPatterns) {
+  var match = function (listPatterns) {
 
     var matchingTable = [];
 
-    var extractPattern = function(patternObject) {
-      for(var k in patternObject) if (patternObject.hasOwnProperty(k)) return k;
+    var extractPattern = function (patternObject) {
+      for (var k in patternObject) if (patternObject.hasOwnProperty(k)) return k;
     };
 
-    listPatterns.map(function(current, index) {
+    listPatterns.map(function (current, index) {
       // Recupération du pattern dans l'objet courant
       var patternText = extractPattern(current);
 
       // Est-ce qu'un autre pattern identique existe dans les declarations ?
-      var isDuplicate = findFirstIndex(listPatterns.slice(index + 1), function(current) {
+      var isDuplicate = findFirstIndex(listPatterns.slice(index + 1), function (current) {
         return extractPattern(current) === patternText;
       }) !== -1;
 
-      if(isDuplicate) {
-        throw 'Duplicate pattern declaration : '+ patternText;
+      if (isDuplicate) {
+        throw 'Duplicate pattern declaration : ' + patternText;
       }
 
       matchingTable.push(when(patternText));
       matchingTable.push(current[patternText]);
     });
 
-    return function(data) {
+    return function (data) {
       var matched = false;
       var currentExecution;
-      for(var i = 0; i < matchingTable.length && !matched; i += 2) {
+      for (var i = 0; i < matchingTable.length && !matched; i += 2) {
         currentExecution = matchingTable[i](data);
-        if(currentExecution.computed) {
+        if (currentExecution.computed) {
           matched = true;
           return matchingTable[i + 1].apply(null, currentExecution.env);
         }
       }
 
-      if(!matched) {
+      if (!matched) {
         throw 'Pattern matching incomplete ! Try to add a "_" pattern';
       }
     };
